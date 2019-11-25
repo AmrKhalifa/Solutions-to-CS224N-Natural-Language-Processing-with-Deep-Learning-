@@ -58,9 +58,9 @@ def naiveSoftmaxLossAndGradient(
     ### This numerically stable implementation helps you avoid issues pertaining
     ### to integer overflow. 
 
-    c = centerWordVec
+    h = centerWordVec
     m = outsideVectors
-    u = np.dot(m, c)
+    u = np.dot(m, h)
     y = softmax(u)
 
     loss = -np.log(y[outsideWordIdx])
@@ -71,7 +71,7 @@ def naiveSoftmaxLossAndGradient(
 
     gradCenterVec = np.dot(m.T, err)
 
-    gradOutsideVecs = err.reshape(-1, 1) @ c.reshape(1, -1)
+    gradOutsideVecs = err.reshape(-1, 1) @ h.reshape(1, -1)
     ### END YOUR CODE
 
     return loss, gradCenterVec, gradOutsideVecs
@@ -118,9 +118,29 @@ def negSamplingLossAndGradient(
     ### YOUR CODE HERE
 
     ### Please use your implementation of sigmoid in here.
-    gradOutsideVecs = np.zeros(outsideVectors.shape)+1
-    gradCenterVec = np.zeros(centerWordVec.shape)+1
-    loss = 0.0+1
+
+    h = centerWordVec
+    m = outsideVectors
+
+    pos_part = np.log(sigmoid(np.dot(m[indices[0]], h)))
+    neg_part = 0
+
+    sig_pos = sigmoid(np.dot(m[indices[0]], h))-1
+    
+    gcv = m[indices[0]] * sig_pos
+    gvo = np.zeros(m.shape)
+
+    gvo[indices[0]] = sig_pos * h
+    
+    for idx in indices[1:]:
+        sig_neg = sigmoid(np.dot(m[idx], h))
+        neg_part += np.log(sigmoid(np.dot(-m[idx], h)))
+        gcv += m[idx] * sig_neg
+        gvo[idx] += sig_neg * h
+
+    loss = - pos_part - neg_part
+    gradCenterVec = gcv
+    gradOutsideVecs = gvo
     ### END YOUR CODE
 
     return loss, gradCenterVec, gradOutsideVecs
@@ -162,8 +182,17 @@ def skipgram(currentCenterWord, windowSize, outsideWords, word2Ind,
     gradOutsideVectors = np.zeros(outsideVectors.shape)
 
     ### YOUR CODE HERE
-    
-    ### END YOUR CODE
+    currentCenterWordIdx = word2Ind[currentCenterWord]
+    centerWordVec = centerWordVectors[currentCenterWordIdx]
+
+    for outsideWord in outsideWords:
+        outsideWordIdx = word2Ind[outsideWord]
+        (l, gradCenter, gradOutside) = word2vecLossAndGradient(
+            centerWordVec, outsideWordIdx, outsideVectors, dataset)
+        loss += l
+        gradCenterVecs[currentCenterWordIdx] += gradCenter
+        gradOutsideVectors += gradOutside
+    ## END YOUR CODE
 
     return loss, gradCenterVecs, gradOutsideVectors
 

@@ -17,7 +17,7 @@ def sigmoid(x):
     """
 
     ### YOUR CODE HERE
-    s =  1/(1+np.exp(-x))
+    s = 1 / (1 + np.exp(-x))
     ### END YOUR CODE
 
     return s
@@ -30,11 +30,9 @@ def naiveSoftmaxLossAndGradient(
     dataset
 ):
     """ Naive Softmax loss & gradient function for word2vec models
-
     Implement the naive softmax loss and gradients between a center word's 
     embedding and an outside word's embedding. This will be the building block
     for our word2vec models.
-
     Arguments:
     centerWordVec -- numpy ndarray, center word's embedding
                     (v_c in the pdf handout)
@@ -43,7 +41,6 @@ def naiveSoftmaxLossAndGradient(
     outsideVectors -- outside vectors (rows of matrix) for all words in vocab
                       (U in the pdf handout)
     dataset -- needed for negative sampling, unused here.
-
     Return:
     loss -- naive softmax loss
     gradCenterVec -- the gradient with respect to the center word vector
@@ -56,22 +53,15 @@ def naiveSoftmaxLossAndGradient(
 
     ### Please use the provided softmax function (imported earlier in this file)
     ### This numerically stable implementation helps you avoid issues pertaining
-    ### to integer overflow. 
+    ### to integer overflow.
+    y_hat = softmax(np.dot(centerWordVec, outsideVectors.T))
+    delta = y_hat.copy()
+    delta[outsideWordIdx] -= 1
 
-    h = centerWordVec
-    m = outsideVectors
-    u = np.dot(m, h)
-    y = softmax(u)
+    loss = -np.log(y_hat)[outsideWordIdx]
+    gradCenterVec = np.dot(delta, outsideVectors)
+    gradOutsideVecs = np.dot(delta[:, np.newaxis], centerWordVec[np.newaxis, :])
 
-    loss = -np.log(y[outsideWordIdx])
-
-    y_ = np.zeros(outsideVectors.shape[0])
-    y_[outsideWordIdx] = 1.0
-    err = y - y_ 
-
-    gradCenterVec = np.dot(m.T, err)
-
-    gradOutsideVecs = err.reshape(-1, 1) @ h.reshape(1, -1)
     ### END YOUR CODE
 
     return loss, gradCenterVec, gradOutsideVecs
@@ -97,16 +87,13 @@ def negSamplingLossAndGradient(
     K=10
 ):
     """ Negative sampling loss function for word2vec models
-
     Implement the negative sampling loss and gradients for a centerWordVec
     and a outsideWordIdx word vector as a building block for word2vec
     models. K is the number of negative samples to take.
-
     Note: The same word may be negatively sampled multiple times. For
     example if an outside word is sampled twice, you shall have to
     double count the gradient with respect to this word. Thrice if
     it was sampled three times, and so forth.
-
     Arguments/Return Specifications: same as naiveSoftmaxLossAndGradient
     """
 
@@ -118,29 +105,40 @@ def negSamplingLossAndGradient(
     ### YOUR CODE HERE
 
     ### Please use your implementation of sigmoid in here.
+    gradOutsideVecs = np.zeros(outsideVectors.shape)
+    gradCenterVec = np.zeros(centerWordVec.shape)
+    loss = 0.0
+    # allVecs = outsideVectors[indices]
+    # allScores = np.dot(allVecs, centerWordVec)
 
-    h = centerWordVec
-    m = outsideVectors
+    # loss = - np.log(sigmoid(allScores[0])) - np.sum(np.log(sigmoid(-allScores[1:])))
+    # # maybe the equation below is wrong
+    # gradCenterVec = (allScores[0] - 1) * allVecs[0] + (1 - sigmoid(-allScores[1:])).dot(allVecs[1:])
 
-    pos_part = np.log(sigmoid(np.dot(m[indices[0]], h)))
-    neg_part = 0
+    # gradOutsideVecs = np.zeros_like(outsideVectors)
+    # gradOutsideVecs[outsideWordIdx] -= (1 - sigmoid(allScores[0])) * centerWordVec
+    # for negSampleWordIdx, i in zip(negSampleWordIndices, range(1, len(indices))):
+    #     gradOutsideVecs[negSampleWordIdx] += (
+    #         1 - sigmoid(-allScores[i])) * allVecs[i]
+    z = sigmoid(np.dot(outsideVectors[outsideWordIdx], centerWordVec))
+    loss -= np.log(z)
 
-    sig_pos = sigmoid(np.dot(m[indices[0]], h))-1
-    
-    gcv = m[indices[0]] * sig_pos
-    gvo = np.zeros(m.shape)
+    gradOutsideVecs[outsideWordIdx] += centerWordVec * (z - 1.0)
+    gradCenterVec += outsideVectors[outsideWordIdx] * (z - 1.0)
 
-    gvo[indices[0]] = sig_pos * h
-    
-    for idx in indices[1:]:
-        sig_neg = sigmoid(np.dot(m[idx], h))
-        neg_part += np.log(sigmoid(np.dot(-m[idx], h)))
-        gcv += m[idx] * sig_neg
-        gvo[idx] += sig_neg * h
-
-    loss = - pos_part - neg_part
-    gradCenterVec = gcv
-    gradOutsideVecs = gvo
+    # Implementation with for loop
+    #for k in range(K):
+    #    samp = indices[k+1]
+    #    z = sigmoid(np.dot(-outsideVectors[samp], centerWordVec))
+    #    loss -= np.log(z)
+    #    gradOutsideVecs[samp] -=  centerWordVec * (z - 1.0)
+    #    gradCenterVec -= outsideVectors[samp] * (z - 1.0)
+    # Vectorized implementation
+    u_k = outsideVectors[negSampleWordIndices]
+    z = sigmoid(-np.dot(u_k,centerWordVec))
+    loss += np.sum(- np.log(z))
+    gradCenterVec += np.dot((z-1),u_k)*(-1)
+    gradOutsideVecs[negSampleWordIndices] += np.outer((z-1),centerWordVec)*(-1)
     ### END YOUR CODE
 
     return loss, gradCenterVec, gradOutsideVecs
@@ -150,9 +148,7 @@ def skipgram(currentCenterWord, windowSize, outsideWords, word2Ind,
              centerWordVectors, outsideVectors, dataset,
              word2vecLossAndGradient=naiveSoftmaxLossAndGradient):
     """ Skip-gram model in word2vec
-
     Implement the skip-gram model in this function.
-
     Arguments:
     currentCenterWord -- a string of the current center word
     windowSize -- integer, context window size
@@ -167,7 +163,6 @@ def skipgram(currentCenterWord, windowSize, outsideWords, word2Ind,
                                a prediction vector given the outsideWordIdx
                                word vectors, could be one of the two
                                loss functions you implemented above.
-
     Return:
     loss -- the loss function value for the skip-gram model
             (J in the pdf handout)
@@ -182,20 +177,18 @@ def skipgram(currentCenterWord, windowSize, outsideWords, word2Ind,
     gradOutsideVectors = np.zeros(outsideVectors.shape)
 
     ### YOUR CODE HERE
+    currentCenterWordIdx = word2Ind[currentCenterWord]
+    centerWordVec = centerWordVectors[currentCenterWordIdx]
 
-    center_word_idx = word2Ind[currentCenterWord]
-    centerWordVec = centerWordVectors[center_word_idx]
-
-    for outside_word in outsideWords:
-        outside_word_idx = word2Ind[outside_word]
-        l, gradCV, gradOV =  word2vecLossAndGradient(centerWordVec, 
-            outside_word_idx, outsideVectors, dataset)
-
+    for outsideWord in outsideWords:
+        outsideWordIdx = word2Ind[outsideWord]
+        (l, gradCenter, gradOutside) = word2vecLossAndGradient(
+            centerWordVec, outsideWordIdx, outsideVectors, dataset)
         loss += l
-        gradCenterVecs[center_word_idx] += gradCV
-        gradOutsideVectors += gradOV
+        gradCenterVecs[currentCenterWordIdx] += gradCenter
+        gradOutsideVectors += gradOutside
 
-    ## END YOUR CODE
+    ### END YOUR CODE
 
     return loss, gradCenterVecs, gradOutsideVectors
 
@@ -203,7 +196,7 @@ def skipgram(currentCenterWord, windowSize, outsideWords, word2Ind,
 # Testing functions below. DO NOT MODIFY!   #
 #############################################
 
-def word2vec_sgd_wrapper(word2vecModel, word2Ind, wordVectors, dataset, 
+def word2vec_sgd_wrapper(word2vecModel, word2Ind, wordVectors, dataset,
                          windowSize,
                          word2vecLossAndGradient=naiveSoftmaxLossAndGradient):
     batchsize = 50
@@ -261,7 +254,7 @@ def test_word2vec():
     print ("Your Result:")
     print("Loss: {}\nGradient wrt Center Vectors (dJ/dV):\n {}\nGradient wrt Outside Vectors (dJ/dU):\n {}\n".format(
             *skipgram("c", 3, ["a", "b", "e", "d", "b", "c"],
-                dummy_tokens, dummy_vectors[:5,:], dummy_vectors[5:,:], dataset) 
+                dummy_tokens, dummy_vectors[:5,:], dummy_vectors[5:,:], dataset)
         )
     )
 
@@ -281,7 +274,7 @@ Gradient wrt Outside Vectors (dJ/dU):
  [-0.13638384  0.06258276  0.47605228]]
     """)
 
-    print ("Skip-Gram with negSamplingLossAndGradient")   
+    print ("Skip-Gram with negSamplingLossAndGradient")
     print ("Your Result:")
     print("Loss: {}\nGradient wrt Center Vectors (dJ/dV):\n {}\n Gradient wrt Outside Vectors (dJ/dU):\n {}\n".format(
         *skipgram("c", 1, ["a", "b"], dummy_tokens, dummy_vectors[:5,:],
@@ -306,3 +299,14 @@ Gradient wrt Center Vectors (dJ/dV):
 
 if __name__ == "__main__":
     test_word2vec()
+
+    # currentCenterWordIdx = word2Ind[currentCenterWord]
+    # centerWordVec = centerWordVectors[currentCenterWordIdx]
+
+    # for outsideWord in outsideWords:
+    #     outsideWordIdx = word2Ind[outsideWord]
+    #     (l, gradCenter, gradOutside) = word2vecLossAndGradient(
+    #         centerWordVec, outsideWordIdx, outsideVectors, dataset)
+    #     loss += l
+    #     gradCenterVecs[currentCenterWordIdx] += gradCenter
+    #     gradOutsideVectors += gradOutside
